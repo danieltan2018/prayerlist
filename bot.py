@@ -8,7 +8,7 @@ import logging
 from functools import wraps
 import random
 import time
-from params import bottoken, port, admin, chat
+from params import bottoken, port
 import json
 from datetime import datetime
 
@@ -44,121 +44,7 @@ logging.basicConfig(filename='debug.log', filemode='a+', format='%(asctime)s - %
 logger = logging.getLogger(__name__)
 
 
-def adminonly(func):
-    @wraps(func)
-    def wrapped(update, context, *args, **kwargs):
-        user_id = update.effective_user.id
-        if user_id == admin:
-            return func(update, context, *args, **kwargs)
-        else:
-            update.message.reply_text(
-                '`Admin Only`', parse_mode=telegram.ParseMode.MARKDOWN)
-    return wrapped
-
-
-@adminonly
-def start(update, context):
-    msg = '''
-*Prayer Partner CountMeIn*
-
-*I'm a guy: assign randomly* (0)
-
-*I'm a girl: assign randomly* (0)
-
-*I'm a guy: assign same gender* (0)
-
-*I'm a girl: assign same gender* (0)
-
-    '''
-    keyboard = [
-        [InlineKeyboardButton(
-            "I'm a guy: assign randomly", callback_data='Guy')],
-        [InlineKeyboardButton(
-            "I'm a girl: assign randomly", callback_data='Girl')],
-        [InlineKeyboardButton(
-            "I'm a guy: assign same gender", callback_data='OnlyGuy')],
-        [InlineKeyboardButton(
-            "I'm a girl: assign same gender", callback_data='OnlyGirl')],
-        [InlineKeyboardButton("Remove my name", callback_data='Remove')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    context.bot.send_message(
-        chat_id=chat, text=msg, reply_markup=reply_markup, parse_mode=telegram.ParseMode.MARKDOWN)
-
-
-@adminonly
-def new(update, context):
-    global leftpairs
-    global rightpairs
-    global newpartners
-    context.bot.send_chat_action(
-        chat_id=admin, action=telegram.ChatAction.TYPING)
-    masterlist = shuffle()
-    while not checklist(masterlist):
-        masterlist = shuffle()
-    if masterlist == None:
-        context.bot.send_message(chat_id=admin, text='_Unable to randomise_',
-                                 parse_mode=telegram.ParseMode.MARKDOWN)
-    else:
-        leftpairs = []
-        rightpairs = []
-        i = 0
-        while i < len(masterlist) - 1:
-            leftpairs.append(masterlist[i])
-            rightpairs.append(masterlist[i+1])
-            i += 2
-    try:
-        compose = '*Prayer Partners ({})*\n'.format(period)
-    except NameError:
-        context.bot.send_message(chat_id=admin, text='_Date not set_',
-                                 parse_mode=telegram.ParseMode.MARKDOWN)
-    for i in range(len(leftpairs)):
-        taggedleft = "[{}](tg://user?id={})".format(
-            users[leftpairs[i]], leftpairs[i])
-        taggedright = "[{}](tg://user?id={})".format(
-            users[rightpairs[i]], rightpairs[i])
-        compose += '{} & {}\n'.format(taggedleft, taggedright)
-    context.bot.send_message(chat_id=admin, text=compose,
-                             parse_mode=telegram.ParseMode.MARKDOWN)
-    newpartners = compose
-
-
-@adminonly
-def send(update, context):
-    global leftpairs
-    global rightpairs
-    global pairings
-    try:
-        for i in range(len(leftpairs)):
-            pairings.setdefault(leftpairs[i], []).append(rightpairs[i])
-            pairings.setdefault(rightpairs[i], []).append(leftpairs[i])
-        context.bot.send_message(chat_id=chat, text=newpartners,
-                                 parse_mode=telegram.ParseMode.MARKDOWN)
-        with open('pairings.json', 'w+') as pairingfile:
-            json.dump(pairings, pairingfile)
-        del leftpairs
-        del rightpairs
-    except:
-        context.bot.send_message(chat_id=admin, text='_Unable to send_',
-                                 parse_mode=telegram.ParseMode.MARKDOWN)
-
-
-@adminonly
-def setdate(update, context):
-    global period
-    period = update.message.text
-    context.bot.send_message(chat_id=admin, text='_Date set_',
-                             parse_mode=telegram.ParseMode.MARKDOWN)
-
-
 def loader():
-    global x
-    try:
-        with open('x.json') as xfile:
-            x = json.load(xfile)
-    except:
-        with open('x.json', 'w+') as xfile:
-            x = {}
     global users
     try:
         with open('users.json') as userfile:
@@ -166,159 +52,127 @@ def loader():
     except:
         with open('users.json', 'w+') as userfile:
             users = {}
-    global pairings
+    global groups
     try:
-        with open('pairings.json') as pairingfile:
-            pairings = json.load(pairingfile)
+        with open('groups.json') as groupfile:
+            groups = json.load(groupfile)
     except:
-        with open('pairings.json', 'w+') as pairingfile:
-            pairings = {}
+        with open('groups.json', 'w+') as groupfile:
+            groups = {}
 
 
-def shuffle():
-    if (len(x['Guy']) + len(x['Girl']) + len(x['OnlyGuy']) + len(x['OnlyGirl'])) % 2 != 0:
-        return None
-    masterlist = []
-    for gender in x:
-        for item in x[gender]:
-            masterlist.append(item)
-    random.shuffle(masterlist)
-    return masterlist
+def start(update, context):
+    user_id = str(update.message.chat_id)
+    if user_id.startswith('-'):
+        message = context.bot.send_message(
+            chat_id=user_id, text='*Added to group successfully*', parse_mode=telegram.ParseMode.MARKDOWN)
+        global groups
+        groups[user_id] = str(message.message_id)
+        with open('groups.json', 'w') as groupfile:
+            json.dump(groups, groupfile)
+    else:
+        first_name = update.message.from_user.first_name
+        last_name = update.message.from_user.last_name
+        full_name = (str(first_name or '') + ' ' +
+                     str(last_name or '')).strip()
+        context.bot.send_message(
+            chat_id=user_id, text='Hi *{}*! You may leave at any time using /leave.'.format(full_name), parse_mode=telegram.ParseMode.MARKDOWN)
+        global users
+        users[user_id] = {'name': full_name, 'prayer': ''}
+        with open('users.json', 'w') as userfile:
+            json.dump(users, userfile)
 
 
-def checklist(masterlist):
-    i = 0
-    while i < len(masterlist) - 1:
-        left = masterlist[i]
-        right = masterlist[i+1]
-        i += 2
-        if left in x['OnlyGuy'] and right not in x['Guy']:
-            return False
-        if right in x['OnlyGuy'] and left not in x['Guy']:
-            return False
-        if left in x['OnlyGirl'] and right not in x['Girl']:
-            return False
-        if right in x['OnlyGirl'] and left not in x['Girl']:
-            return False
-        if left in pairings and right in pairings[left]:
-            return False
-    return True
-
-
-def callbackquery(update, context):
-    now = datetime.now()
-    current_time = now.strftime("%d/%m/%Y %H:%M:%S")
-    query = update.callback_query
-    data = query.data
-    user_id = str(query.from_user.id)
-    first_name = query.from_user.first_name
-    last_name = query.from_user.last_name
-    full_name = (str(first_name or '') + ' ' + str(last_name or '')).strip()
+def leave(update, context):
+    user_id = str(update.effective_user.id)
     global users
-    users[user_id] = full_name
+    del users[user_id]
     with open('users.json', 'w') as userfile:
         json.dump(users, userfile)
-    global x
-    x.setdefault('Guy', [])
-    x.setdefault('Girl', [])
-    x.setdefault('OnlyGuy', [])
-    x.setdefault('OnlyGirl', [])
-    if data == 'Guy':
-        if user_id not in x['Guy']:
-            x['Guy'].append(user_id)
-        if user_id in x['Girl']:
-            x['Girl'].remove(user_id)
-        if user_id in x['OnlyGuy']:
-            x['OnlyGuy'].remove(user_id)
-        if user_id in x['OnlyGirl']:
-            x['OnlyGirl'].remove(user_id)
-    if data == 'Girl':
-        if user_id not in x['Girl']:
-            x['Girl'].append(user_id)
-        if user_id in x['Guy']:
-            x['Guy'].remove(user_id)
-        if user_id in x['OnlyGuy']:
-            x['OnlyGuy'].remove(user_id)
-        if user_id in x['OnlyGirl']:
-            x['OnlyGirl'].remove(user_id)
-    if data == 'OnlyGuy':
-        if user_id not in x['OnlyGuy']:
-            x['OnlyGuy'].append(user_id)
-        if user_id in x['Guy']:
-            x['Guy'].remove(user_id)
-        if user_id in x['Girl']:
-            x['Girl'].remove(user_id)
-        if user_id in x['OnlyGirl']:
-            x['OnlyGirl'].remove(user_id)
-    if data == 'OnlyGirl':
-        if user_id not in x['OnlyGirl']:
-            x['OnlyGirl'].append(user_id)
-        if user_id in x['Guy']:
-            x['Guy'].remove(user_id)
-        if user_id in x['Girl']:
-            x['Girl'].remove(user_id)
-        if user_id in x['OnlyGuy']:
-            x['OnlyGuy'].remove(user_id)
-    if data == 'Remove':
-        if user_id in x['Guy']:
-            x['Guy'].remove(user_id)
-        if user_id in x['Girl']:
-            x['Girl'].remove(user_id)
-        if user_id in x['OnlyGuy']:
-            x['OnlyGuy'].remove(user_id)
-        if user_id in x['OnlyGirl']:
-            x['OnlyGirl'].remove(user_id)
-    with open('x.json', 'w') as xfile:
-        json.dump(x, xfile)
-    guy = ''
-    for item in x['Guy']:
-        guy += users[item] + '\n'
-    girl = ''
-    for item in x['Girl']:
-        girl += users[item] + '\n'
-    onlyguy = ''
-    for item in x['OnlyGuy']:
-        onlyguy += users[item] + '\n'
-    onlygirl = ''
-    for item in x['OnlyGirl']:
-        onlygirl += users[item] + '\n'
-    if (len(x['Guy']) + len(x['Girl']) + len(x['OnlyGuy']) + len(x['OnlyGirl'])) % 2 != 0:
-        odd = '_1 on waitlist due to odd number_\n'
-    else:
-        odd = ''
-    msg = '''
-*Prayer Partner CountMeIn*
-{}
-*I'm a guy: assign randomly* ({})
-{}
-*I'm a girl: assign randomly* ({})
-{}
-*I'm a guy: assign same gender* ({})
-{}
-*I'm a girl: assign same gender* ({})
-{}
-_Last updated: {}_
-    '''.format(odd, len(x['Guy']), guy, len(x['Girl']), girl, len(x['OnlyGuy']), onlyguy, len(x['OnlyGirl']), onlygirl, current_time)
-    keyboard = [
-        [InlineKeyboardButton(
-            "I'm a guy: assign randomly", callback_data='Guy')],
-        [InlineKeyboardButton(
-            "I'm a girl: assign randomly", callback_data='Girl')],
-        [InlineKeyboardButton(
-            "I'm a guy: assign same gender", callback_data='OnlyGuy')],
-        [InlineKeyboardButton(
-            "I'm a girl: assign same gender", callback_data='OnlyGirl')],
-        [InlineKeyboardButton("Remove my name", callback_data='Remove')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    context.bot.edit_message_text(
-        chat_id=query.message.chat_id,
-        message_id=query.message.message_id,
-        text=msg,
-        reply_markup=reply_markup,
-        parse_mode=telegram.ParseMode.MARKDOWN
-    )
-    context.bot.answer_callback_query(query.id)
+    context.bot.send_message(
+        chat_id=user_id, text='*Goodbye!*', parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+def new(update, context):
+    global groups
+    for group in groups:
+        message = context.bot.send_message(
+            chat_id=int(group), text='*Prayer List*', parse_mode=telegram.ParseMode.MARKDOWN)
+        groups[group] = str(message.message_id)
+        with open('groups.json', 'w') as groupfile:
+            json.dump(groups, groupfile)
+    compose = '*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)'
+    global users
+    for user_id in users:
+        users[user_id]['prayer'] = ''
+        sendnew(context, user_id, compose)
+    with open('users.json', 'w') as userfile:
+        json.dump(users, userfile)
+
+
+@run_async
+def sendnew(context, user_id, compose):
+    context.bot.send_message(
+        chat_id=int(user_id), text=compose, parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+def shuffle(update, context):
+    randomlist = []
+    for value in users.values():
+        randomlist.append(value['name'])
+    if len(randomlist) < 2:
+        update.message.reply_text(
+            '_Too few people!_', parse_mode=telegram.ParseMode.MARKDOWN)
+        return
+    random.shuffle(randomlist)
+    compose = '*Prayer Partners*\n\n'
+    i = 0
+    while i < len(randomlist) - 1:
+        compose += '*{}*'.format(randomlist[i])
+        compose += ' & '
+        compose += '*{}*'.format(randomlist[i+1])
+        if i + 2 == len(randomlist):
+            break
+        elif i + 3 == len(randomlist):
+            compose += ' & '
+            compose += '*{}*'.format(randomlist[i+2])
+            break
+        else:
+            compose += '\n'
+        i += 2
+    for group in groups:
+        context.bot.send_message(
+            chat_id=int(group), text=compose, parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+def prayer(update, context):
+    user_id = str(update.message.chat_id)
+    if user_id.startswith('-'):
+        return
+    users[user_id]['prayer'] = update.message.text
+    with open('users.json', 'w') as userfile:
+        json.dump(users, userfile)
+    groupedit(context)
+    update.message.reply_text(
+        '_Saved._', parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+def groupedit(context):
+    compose = '*Prayer List*\n\n'
+    for value in users.values():
+        name = value['name']
+        prayer = value['prayer']
+        compose += '*{}*:\n'.format(name)
+        compose += prayer
+        compose += '\n\n'
+    compose = compose.strip()
+    for key, value in groups.items():
+        context.bot.edit_message_text(
+            chat_id=int(key),
+            message_id=int(value),
+            text=compose,
+            parse_mode=telegram.ParseMode.MARKDOWN
+        )
 
 
 def main():
@@ -326,14 +180,14 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text, setdate))
+    dp.add_handler(CommandHandler("leave", leave))
     dp.add_handler(CommandHandler("new", new))
-    dp.add_handler(CommandHandler("send", send))
-    dp.add_handler(CallbackQueryHandler(callbackquery))
+    dp.add_handler(CommandHandler("shuffle", shuffle))
+    dp.add_handler(MessageHandler(Filters.text, prayer))
 
     loader()
 
-    #updater.start_polling()
+    updater.start_polling()
     updater.start_webhook(listen='0.0.0.0',
                           port=port,
                           url_path=bottoken,
