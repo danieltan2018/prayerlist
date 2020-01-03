@@ -195,8 +195,7 @@ def main():
                           cert='cert.pem',
                           webhook_url='https://{}:{}/{}'.format(ip, port, bottoken))
 
-    print("Bot is running. Press Ctrl+C to stop.")
-    print("Please wait for confirmation before closing.")
+    print("Prayer List Bot is running. Press Ctrl+C to stop.")
     updater.idle()
     print("Bot stopped successfully.")
 
