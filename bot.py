@@ -45,6 +45,33 @@ logging.basicConfig(filename='debug.log', filemode='a+', format='%(asctime)s - %
 logger = logging.getLogger(__name__)
 
 
+def useronly(func):
+    @wraps(func)
+    def wrapped(update, context, *args, **kwargs):
+        user_id = str(update.message.chat_id)
+        if user_id.startswith('-'):
+            update.message.reply_text(
+                '_Cannot run this command in a group. Please PM the bot._', parse_mode=telegram.ParseMode.MARKDOWN)
+        elif user_id not in users:
+            update.message.reply_text(
+                '_Please /start first_', parse_mode=telegram.ParseMode.MARKDOWN)
+            return
+        return func(update, context, *args, **kwargs)
+    return wrapped
+
+
+def grouponly(func):
+    @wraps(func)
+    def wrapped(update, context, *args, **kwargs):
+        user_id = str(update.message.chat_id)
+        if not user_id.startswith('-'):
+            update.message.reply_text(
+                '_This command can only be run in a group._', parse_mode=telegram.ParseMode.MARKDOWN)
+            return
+        return func(update, context, *args, **kwargs)
+    return wrapped
+
+
 def loader():
     global users
     try:
@@ -62,51 +89,60 @@ def loader():
             groups = {}
 
 
+@grouponly
+def add(update, context):
+    user_id = str(update.message.chat_id)
+    message = context.bot.send_message(
+        chat_id=user_id, text='*I will send the prayer list to this group.*\n\nTo change group, /remove this group first.', parse_mode=telegram.ParseMode.MARKDOWN)
+    global groups
+    groups[user_id] = str(message.message_id)
+    with open('groups.json', 'w') as groupfile:
+        json.dump(groups, groupfile)
+    new(update, context)
+
+
+@grouponly
+def remove(update, context):
+    user_id = str(update.message.chat_id)
+    global groups
+    del groups[user_id]
+    with open('groups.json', 'w') as groupfile:
+        json.dump(groups, groupfile)
+    context.bot.send_message(
+        chat_id=user_id, text='*I will stop sending the prayer list to this group.*', parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+@useronly
 def start(update, context):
     user_id = str(update.message.chat_id)
-    if user_id.startswith('-'):
-        message = context.bot.send_message(
-            chat_id=user_id, text='*I will send the prayer list to this group.*\n\nTo change group, /leave this group first.', parse_mode=telegram.ParseMode.MARKDOWN)
-        global groups
-        groups[user_id] = str(message.message_id)
-        with open('groups.json', 'w') as groupfile:
-            json.dump(groups, groupfile)
-        new(update, context)
-    else:
-        first_name = update.message.from_user.first_name
-        last_name = update.message.from_user.last_name
-        full_name = (str(first_name or '') + ' ' +
-                     str(last_name or '')).strip()
-        context.bot.send_message(
-            chat_id=user_id, text='Hi *{}*! You have been added to the prayer list.\n\nYou may leave at any time using /leave.'.format(full_name), parse_mode=telegram.ParseMode.MARKDOWN)
-        context.bot.send_message(
-            chat_id=user_id, text='*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)', parse_mode=telegram.ParseMode.MARKDOWN)
-        global users
-        users[user_id] = {'name': full_name, 'prayer': ''}
-        with open('users.json', 'w') as userfile:
-            json.dump(users, userfile)
-        groupedit(context)
+    first_name = update.message.from_user.first_name
+    last_name = update.message.from_user.last_name
+    full_name = (str(first_name or '') + ' ' +
+                 str(last_name or '')).strip()
+    context.bot.send_message(
+        chat_id=user_id, text='Hi *{}*! You have been added to the prayer list.\n\nYou may leave at any time using /stop.'.format(full_name), parse_mode=telegram.ParseMode.MARKDOWN)
+    context.bot.send_message(
+        chat_id=user_id, text='*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)', parse_mode=telegram.ParseMode.MARKDOWN)
+    global users
+    users[user_id] = {'name': full_name, 'prayer': ''}
+    with open('users.json', 'w') as userfile:
+        json.dump(users, userfile)
+    groupedit(context)
 
 
-def leave(update, context):
+@useronly
+def stop(update, context):
     user_id = str(update.message.chat_id)
-    if user_id.startswith('-'):
-        global groups
-        del groups[user_id]
-        with open('groups.json', 'w') as groupfile:
-            json.dump(groups, groupfile)
-        context.bot.send_message(
-            chat_id=user_id, text='*I will stop sending the prayer list to this group.*', parse_mode=telegram.ParseMode.MARKDOWN)
-    else:
-        global users
-        del users[user_id]
-        with open('users.json', 'w') as userfile:
-            json.dump(users, userfile)
-        context.bot.send_message(
-            chat_id=user_id, text='*Goodbye!*', parse_mode=telegram.ParseMode.MARKDOWN)
-        groupedit(context)
+    global users
+    del users[user_id]
+    with open('users.json', 'w') as userfile:
+        json.dump(users, userfile)
+    context.bot.send_message(
+        chat_id=user_id, text='*Goodbye!*', parse_mode=telegram.ParseMode.MARKDOWN)
+    groupedit(context)
 
 
+@useronly
 def new(update, context):
     global groups
     for group in groups:
@@ -129,6 +165,7 @@ def sendnew(context, user_id, compose):
         chat_id=int(user_id), text=compose, parse_mode=telegram.ParseMode.MARKDOWN)
 
 
+@useronly
 def shuffle(update, context):
     randomlist = []
     for value in users.values():
@@ -159,6 +196,7 @@ def shuffle(update, context):
         break
 
 
+@useronly
 def prayer(update, context):
     user_id = str(update.message.chat_id)
     if user_id.startswith('-'):
@@ -203,7 +241,7 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("leave", leave))
+    dp.add_handler(CommandHandler("stop", stop))
     dp.add_handler(CommandHandler("new", new))
     dp.add_handler(CommandHandler("shuffle", shuffle))
     dp.add_handler(MessageHandler(Filters.text, prayer))
