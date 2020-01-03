@@ -197,7 +197,6 @@ def shuffle(update, context):
         break
 
 
-@useronly
 def prayer(update, context):
     user_id = str(update.message.chat_id)
     if user_id.startswith('-'):
