@@ -240,6 +240,8 @@ def main():
     updater = Updater(token=bottoken, use_context=True)
     dp = updater.dispatcher
 
+    dp.add_handler(CommandHandler("add", add))
+    dp.add_handler(CommandHandler("remove", remove))
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("stop", stop))
     dp.add_handler(CommandHandler("new", new))
