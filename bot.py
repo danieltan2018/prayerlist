@@ -95,7 +95,7 @@ def add(update, context):
     groups[user_id] = str(message.message_id)
     with open('groups.json', 'w') as groupfile:
         json.dump(groups, groupfile)
-    new(update, context)
+    groupinit(context)
 
 
 @grouponly
@@ -141,6 +141,14 @@ def stop(update, context):
 
 @useronly
 def new(update, context):
+    groupinit(context)
+    compose = '*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)'
+    for user_id in users:
+        users[user_id]['prayer'] = ''
+        sendnew(context, user_id, compose)
+
+
+def groupinit(context):
     global groups
     for group in groups:
         message = context.bot.send_message(
@@ -150,10 +158,6 @@ def new(update, context):
             json.dump(groups, groupfile)
         groupedit(context)
         break
-    compose = '*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)'
-    for user_id in users:
-        users[user_id]['prayer'] = ''
-        sendnew(context, user_id, compose)
 
 
 @run_async
@@ -247,7 +251,7 @@ def main():
 
     loader()
 
-    #updater.start_polling()
+    # updater.start_polling()
     updater.start_webhook(listen='0.0.0.0',
                           port=port,
                           url_path=bottoken,
