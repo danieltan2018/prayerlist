@@ -52,9 +52,6 @@ def useronly(func):
         if user_id.startswith('-'):
             update.message.reply_text(
                 '_Cannot run this command in a group. Please PM the bot._', parse_mode=telegram.ParseMode.MARKDOWN)
-        elif user_id not in users:
-            update.message.reply_text(
-                '_Please /start first_', parse_mode=telegram.ParseMode.MARKDOWN)
             return
         return func(update, context, *args, **kwargs)
     return wrapped
