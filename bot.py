@@ -79,6 +79,8 @@ def start(update, context):
                      str(last_name or '')).strip()
         context.bot.send_message(
             chat_id=user_id, text='Hi *{}*! You have been added to the prayer list.\n\nYou may leave at any time using /leave.'.format(full_name), parse_mode=telegram.ParseMode.MARKDOWN)
+        context.bot.send_message(
+            chat_id=user_id, text='*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)', parse_mode=telegram.ParseMode.MARKDOWN)
         global users
         users[user_id] = {'name': full_name, 'prayer': ''}
         with open('users.json', 'w') as userfile:
@@ -116,12 +118,9 @@ def new(update, context):
         groupedit(context)
         break
     compose = '*Send me your thanksgiving / prayer requests.*\n\n(You can update it at any time by sending another message)'
-    global users
     for user_id in users:
         users[user_id]['prayer'] = ''
         sendnew(context, user_id, compose)
-    with open('users.json', 'w') as userfile:
-        json.dump(users, userfile)
 
 
 @run_async
